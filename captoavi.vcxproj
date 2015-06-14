@@ -93,6 +93,7 @@
     <ClInclude Include="..\..\..\reenigne\include\alfe\file_handle.h" />
     <ClInclude Include="..\..\..\reenigne\include\alfe\handle.h" />
     <ClInclude Include="..\..\..\reenigne\include\alfe\main.h" />
+    <ClInclude Include="..\..\..\reenigne\include\alfe\ntsc_decode.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

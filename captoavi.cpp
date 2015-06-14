@@ -41,6 +41,8 @@ class Program : public ProgramBase
 public:
     void run()
     {
+        bool doDecode = false;
+
         static const int samples = 450*1024;
         static const int inputBufferSize = samples;
         static const int sampleSpaceBefore = 256;
@@ -64,16 +66,26 @@ public:
             b[i + samples] = 0;
         int outputBytesRemaining = samples;
 
-        Bitmap<UInt32> decoded(Vector(1280, 240));
-        decoded.fill(0);
+        Vector outputSize;
         NTSCCaptureDecoder<UInt32> decoder;
-        decoder.setBuffers(b,
-            decoded.subBitmap(Vector(160, 0), Vector(960, 240)));
+         
+        if (doDecode) 
+            outputSize = Vector(1280, 720);
+        else
+            outputSize = Vector(1824, 253);
+        Bitmap<UInt32> decoded(outputSize);
+        if (doDecode)
+            decoder.setOutputBuffer(
+                decoded.subBitmap(Vector(160, 0), Vector(960, 720)));
+        else
+            decoder.setOutputBuffer(decoded);
+        decoded.fill(0);
+        decoder.setInputBuffer(b);
         decoder.setOutputPixelsPerLine(1140);
+        decoder.setYScale(3);
+        decoder.setDoDecode(doDecode);
 
-        static const int width = 1280;
-        static const int height = 720;
-        _handle = fopen("u:\\captured.avi","wb");
+        _handle = fopen("u:\\captured2.avi","wb");
         if (!_handle)
             throw Exception("Can't open file");
 
@@ -91,13 +103,11 @@ public:
         }
         memset(&_zstream, 0, sizeof(_zstream));
 
-        _width = width;
-        _height = height;
-        _pitch = _width + 2*MAX_VECTOR;
+        _pitch = outputSize.x + 2*MAX_VECTOR;
         if (deflateInit(&_zstream, 4) != Z_OK)
             throw Exception("deflateInit failed");
 
-        _bufSize = 4*_width*_height + 2*(1+(_width/8)) * (1+(_height/8))+1024;
+        _bufSize = 4*outputSize.x*outputSize.y + 2*(1+(outputSize.x/8)) * (1+(outputSize.y/8))+1024;
         _bufSize += _bufSize / 1000;
 
         _buf = malloc(_bufSize);
@@ -109,8 +119,6 @@ public:
         _indexsize = 16*4096;
         _indexused = 8;
 
-        _width = width;
-        _height = height;
         for (int i = 0; i < AVI_HEADER_SIZE; ++i)
             fputc(0, _handle);
         _frames = 0;
@@ -121,18 +129,18 @@ public:
         int blockwidth = 16;
         int blockheight = 16;
         _pixelsize = 4;
-        _bufsize = (_height+2*MAX_VECTOR)*_pitch*_pixelsize+2048;
+        _bufsize = (outputSize.y + 2*MAX_VECTOR)*_pitch*_pixelsize+2048;
 
         _buf1.allocate(_bufsize);
         _buf2.allocate(_bufsize);
         _work.allocate(_bufsize);
 
-        int xblocks = (_width/blockwidth);
-        int xleft = _width % blockwidth;
+        int xblocks = (outputSize.x/blockwidth);
+        int xleft = outputSize.x % blockwidth;
         if (xleft)
             ++xblocks;
-        int yblocks = (_height/blockheight);
-        int yleft = _height % blockheight;
+        int yblocks = (outputSize.y/blockheight);
+        int yleft = outputSize.y % blockheight;
         if (yleft)
             ++yblocks;
         _blockcount = yblocks*xblocks;
@@ -194,6 +202,7 @@ public:
                 bool keyFrame = false;
                 if (_frames % 300 == 0)
                     keyFrame = true;
+                 keyFrame = true;
 
                 /* replace oldframe with new frame */
                 unsigned char* copyFrame = _newframe;
@@ -226,23 +235,21 @@ public:
                     deflateReset(&_zstream);
                 }
 
-                for (int i = 0; i < 240; ++i) {
+                for (int i = 0; i < outputSize.y; ++i) {
                     void* rowPointer = decoded.data() + decoded.stride()*i;
-                    for (int j = 0; j < 3; ++j) {
-                        unsigned char* destStart = _newframe + _pixelsize*(MAX_VECTOR+(compress.linesDone+MAX_VECTOR)*_pitch);
-                        memcpy(destStart, rowPointer, _width * _pixelsize);
-                        destStart += _pitch * _pixelsize;
-                        compress.linesDone++;
-                    }
+                    unsigned char* destStart = _newframe + _pixelsize*(MAX_VECTOR+(compress.linesDone+MAX_VECTOR)*_pitch);
+                    memcpy(destStart, rowPointer, outputSize.x * _pixelsize);
+                    destStart += _pitch * _pixelsize;
+                    compress.linesDone++;
                 }
 
                 if ((*compress.writeBuf) & Mask_KeyFrame) {
                     /* Add the full frame data */
                     unsigned char* readFrame = _newframe + _pixelsize*(MAX_VECTOR+MAX_VECTOR*_pitch);	
-                    for (int i = 0; i < _height; ++i) {
-                        memcpy(&_work[_workUsed], readFrame, _width*_pixelsize);
+                    for (int i = 0; i < outputSize.y; ++i) {
+                        memcpy(&_work[_workUsed], readFrame, outputSize.x*_pixelsize);
                         readFrame += _pitch*_pixelsize;
-                        _workUsed += _width*_pixelsize;
+                        _workUsed += outputSize.x*_pixelsize;
                     }
                 }
                 else {
@@ -349,8 +356,8 @@ public:
         AVIOUTd(0);                         /* InitialFrames */
         AVIOUTd(2);                         /* Stream count */
         AVIOUTd(0);                         /* SuggestedBufferSize */
-        AVIOUTd(_width);       /* Width */
-        AVIOUTd(_height);      /* Height */
+        AVIOUTd(outputSize.x);       /* Width */
+        AVIOUTd(outputSize.y);      /* Height */
         AVIOUTd(0);                         /* TimeScale:  Unit used to measure time */
         AVIOUTd(0);                         /* DataRate:   Data rate of playback     */
         AVIOUTd(0);                         /* StartTime:  Starting time of AVI data */
@@ -381,12 +388,12 @@ public:
         AVIOUT4("strf");
         AVIOUTd(40);                 /* # of bytes to follow */
         AVIOUTd(40);                 /* Size */
-        AVIOUTd(_width);         /* Width */
-        AVIOUTd(_height);        /* Height */
+        AVIOUTd(outputSize.x);         /* Width */
+        AVIOUTd(outputSize.y);        /* Height */
 //		OUTSHRT(1); OUTSHRT(24);     /* Planes, Count */
         AVIOUTd(0);
         AVIOUT4(CODEC_4CC);          /* Compression */
-        AVIOUTd(_width * _height*4);  /* SizeImage (in bytes?) */
+        AVIOUTd(outputSize.x*outputSize.y*4);  /* SizeImage (in bytes?) */
         AVIOUTd(0);                  /* XPelsPerMeter */
         AVIOUTd(0);                  /* YPelsPerMeter */
         AVIOUTd(0);                  /* ClrUsed: Number of colors used */
@@ -571,7 +578,7 @@ private:
 
     int _workUsed, _workPos;
 
-    int _height, _width, _pitch;
+    int _pitch;
     int _pixelsize;
 
     z_stream _zstream;

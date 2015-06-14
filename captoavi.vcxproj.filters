@@ -35,5 +35,8 @@
     <ClInclude Include="..\..\..\reenigne\include\alfe\main.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\..\reenigne\include\alfe\ntsc_decode.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
